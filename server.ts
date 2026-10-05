@@ -3,6 +3,7 @@ import http from 'http';
 import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,7 +46,7 @@ app.get('/api/xtream', async (req: Request, res: Response) => {
   try {
     const serverUrl = (req.query.server as string) || DEFAULT_SERVER;
     const cleanServer = serverUrl.replace(/\/+$/, '');
-    
+
     // Build target query string excluding 'server'
     const queryParams = new URLSearchParams();
     for (const [key, value] of Object.entries(req.query)) {
@@ -53,7 +54,7 @@ app.get('/api/xtream', async (req: Request, res: Response) => {
         queryParams.append(key, value);
       }
     }
-    
+
     const targetUrl = `${cleanServer}/player_api.php?${queryParams.toString()}`;
 
     const protocol = targetUrl.startsWith('https') ? https : http;
@@ -173,7 +174,7 @@ app.get('/api/epg', async (req: Request, res: Response) => {
 
     // If username and password are provided, attempt to query the remote server's short EPG
     if (streamId && username && password) {
-      const epgUrl = `${serverUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&action=get_short_epg&stream_id=${encodeURIComponent(streamId)}&limit=10`;
+      const epgUrl = `${serverUrl}/player_api.php?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&action=get_short_epg&stream_id=${encodeURIComponent(streamId)}`;
       try {
         const fetchRes = await fetch(epgUrl, { signal: AbortSignal.timeout(4000) });
         if (fetchRes.ok) {
@@ -194,10 +195,10 @@ app.get('/api/epg', async (req: Request, res: Response) => {
 
     // Generate 4 program slots around current time
     const channelPrograms: Record<string, string[]> = {
-      sports: ['ถ่ายทอดสด ฟุตบอลพรีเมียร์ลีก บิ๊กแมตช์', 'ไฮไลท์ฟุตบอลยุโรป & วิเคราะห์เกม', 'Sports News Today สรุปข่าวสารวงการกีฬา', 'ถ่ายทอดสด เทนนิส / บาสเกตบอลสด'],
-      news: ['ข่าวเด่นประเด็นร้อน รอบวัน', 'คุยข่าวเช้า / เที่ยง เจาะลึกสถานการณ์', 'ทันเหตุการณ์ ข่าวภาคค่ำ', 'สารคดีโลก & เศรษฐกิจการเงิน'],
-      movies: ['ภาพยนตร์บล็อกบัสเตอร์ ฟอร์มยักษ์', 'แอคชั่นไซไฟ มันส์ระห่ำ', 'ภาพยนตร์แอนิเมชั่น ยอดเยี่ยม', 'ภาพยนตร์ระทึกขวัญ รอบดึก'],
-      default: ['รายการวาไรตี้บันเทิงยามเย็น', 'ละครซีรีส์ดัง ช่วงไพรม์ไทม์', 'รายการข่าวภาคค่ำประจำวัน', 'เกมโชว์ ท้าประลองความสนุก'],
+      sports: ['ถ่ายทอดสด ฟุตบอลพรีเมียร์ลีก บิ๊กแมตช์', 'ไฮไลท์ฟุตบอลยุโรป & วิเคราะห์', 'กีฬาทั่วโลก เวลาจริง', 'สรุปเกมดังประจำวัน'],
+      news: ['ข่าวเด่นประเด็นร้อน รอบวัน', 'คุยข่าวเช้า / เที่ยง เจาะลึกสถานการณ์', 'วิเคราะห์เศรษฐกิจและการเมือง', 'ข่าวภาคค่ำสรุปเหตุการณ์'],
+      movies: ['ภาพยนตร์บล็อกบัสเตอร์ ฟอร์มยักษ์', 'แอคชั่นไซไฟ มันส์ระห่ำ', 'ภาพยนตร์ตลกสุดฮา', 'เรื่องยาวประจำวัน'],
+      default: ['รายการวาไรตี้บันเทิงยามเย็น', 'ละครซีรีส์ดัง ช่วงไพรม์ไทม์', 'รายการข่าวและเสริมความรู้', 'คอนเทนต์สุดฮิตประจำคืน'],
     };
 
     const lower = channelName.toLowerCase();
@@ -258,7 +259,7 @@ app.post('/api/membership/register', (req: Request, res: Response) => {
     registrations.unshift(reg);
     res.json({
       status: 'ok',
-      msg: 'ส่งข้อมูลสมัครสมาชิกเรียบร้อยแล้ว! กำลังตรวจสอบสลิปภายใน 15 นาที หรือแจ้งแอดมินทาง LINE @680salib',
+      msg: 'ส่งข้อมูลสมัครสมาชิกเรียบร้อยแล้ว! กำลังตรวจสอบสลิปภายใน 15 นาที',
       regId: reg.id,
     });
   } catch (err: any) {
@@ -283,21 +284,21 @@ app.post('/api/monitor/ping', (req: Request, res: Response) => {
 
 // Vite & Static file handling
 async function startServer() {
-  const isDev = process.env.NODE_ENV !== 'production';
+  const distPath = path.resolve(__dirname, 'dist');
+  const hasDist = existsSync(path.join(distPath, 'index.html'));
 
-  if (isDev) {
+  if (process.env.NODE_ENV === 'production' && hasDist) {
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  } else {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(distPath, 'index.html'));
-    });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
